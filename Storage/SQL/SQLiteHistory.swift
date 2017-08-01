@@ -377,6 +377,13 @@ extension SQLiteHistory: BrowserHistory {
     //swiftlint:enable opening_brace
 
     fileprivate func updateTopSitesCacheWithLimit(_ limit: Int) -> Success {
+        return self.db.run(self.refreshTopsitesQuery(limit)) >>> {
+            self.prefs.setBool(true, forKey: PrefsKeys.KeyTopSitesCacheIsValid)
+            return succeed()
+        }
+    }
+
+    fileprivate func updateTopSitesCacheQuery(_ limit: Int) -> (String, Args?) {
         let (whereData, groupBy) = self.topSiteClauses()
         let (query, args) = self.filteredSitesByFrecencyQueryWithHistoryLimit(limit, bookmarksLimit: 0, groupClause: groupBy, whereData: whereData)
 
@@ -387,22 +394,25 @@ extension SQLiteHistory: BrowserHistory {
             "localVisitDate, remoteVisitDate, localVisitCount, remoteVisitCount,",
             "iconID, iconURL, iconDate, iconType, iconWidth, frecencies",
             "FROM (", query, ")"
-        ].joined(separator: " ")
+            ].joined(separator: " ")
+        return (insertQuery, args)
+    }
 
-        return self.clearTopSitesCache() >>> {
-            return self.db.run(insertQuery, withArgs: args)
-        } >>> {
-            self.prefs.setBool(true, forKey: PrefsKeys.KeyTopSitesCacheIsValid)
+    public func refreshTopsitesQuery(_ limit: Int) -> [(String, Args?)] {
+        return [clearTopsitesQuery(), updateTopSitesCacheQuery(limit)]
+    }
+
+    public func clearTopSitesCache() -> Success {
+        let (query, args) = clearTopsitesQuery()
+        return self.db.run(query, withArgs: args) >>> {
+            self.prefs.removeObjectForKey(PrefsKeys.KeyTopSitesCacheIsValid)
             return succeed()
         }
     }
 
-    public func clearTopSitesCache() -> Success {
+    private func clearTopsitesQuery() -> (String, Args?) {
         let deleteQuery = "DELETE FROM \(TableCachedTopSites)"
-        return self.db.run(deleteQuery, withArgs: nil) >>> {
-            self.prefs.removeObjectForKey(PrefsKeys.KeyTopSitesCacheIsValid)
-            return succeed()
-        }
+        return (deleteQuery, nil)
     }
 
     public func getSitesByFrecencyWithHistoryLimit(_ limit: Int, bookmarksLimit: Int, whereURLContains filter: String) -> Deferred<Maybe<Cursor<Site>>> {

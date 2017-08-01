@@ -59,21 +59,16 @@ class ActivityStreamDataObserver: DataObserver {
             self.delegate?.didInvalidateDataSources()
         }
 
-        let invalidateTopSites: () -> Success = {
-            self.profile.history.setTopSitesNeedsInvalidation()
-            return self.profile.history.updateTopSitesCacheIfInvalidated() >>> succeed
+        let refreshTopsites: () -> Success = {
+            return self.profile.history.refreshTopSitesCache() >>> succeed
         }
 
         let shouldInvalidate = highlights ? true : (Date.now() - lastInvalidation > invalidationTime)
         lastInvalidation = shouldInvalidate ? Date.now() : lastInvalidation
-        let invalidateHighlights: () -> Success = {
-            guard shouldInvalidate else {
-                return succeed()
-            }
-            return self.profile.recommendations.repopulateHighlights()
-        }
 
-        invalidateTopSites() >>> invalidateHighlights >>> effect(notify)
+        self.profile.recommendations.repopulateAll(shouldInvalidate, topsitesLimit: 16).upon() { _ in
+            self.delegate?.didInvalidateDataSources()
+        }
     }
     
     @objc func notificationReceived(_ notification: Notification) {

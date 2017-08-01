@@ -53,6 +53,8 @@ public protocol HistoryRecommendations {
 
     func removeHighlightForURL(_ url: String) -> Success
     func repopulateHighlights() -> Success
+    func repopulateAll(_ invalidateHighlights: Bool, topsitesLimit: Int) -> Success
+
 }
 
 /**

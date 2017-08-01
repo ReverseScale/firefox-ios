@@ -32,6 +32,7 @@ extension SQLiteMetadata: Metadata {
         guard let cacheKey = SQLiteMetadata.cacheKeyForURL(pageURL as URL) else {
             return succeed()
         }
+        print(cacheKey)
 
         // Replace any matching cache_key entries if they exist
         let selectUniqueCacheKey = "COALESCE((SELECT cache_key FROM \(TablePageMetadata) WHERE cache_key = ?), ?)"
