@@ -113,15 +113,19 @@ class SearchTests: BaseTestCase {
         app.typeText("\r")
         
         // Check that the website is loaded
-        waitForValueContains(app.textFields["url"], value: "https://www.mozilla.org/")
+        waitForValueContains(app.textFields["url"], value: "https://www.mozilla.org")
         
         // Go back, write part of moz, check the autocompletion
-        app.buttons["TabToolbar.backButton"].tap()
+        if iPad() {
+            app.buttons["URLBarView.backButton"].tap()
+        } else {
+            app.buttons["TabToolbar.backButton"].tap()
+        }
         navigator.nowAt(NewTabScreen)
         typeOnSearchBar(text: "moz")
         waitForValueContains(app.textFields["address"], value: "mozilla.org")
         let value = app.textFields["address"].value
-        XCTAssertEqual(value as? String, "mozilla.org/")
+        XCTAssertEqual(value as? String, "mozilla.org")
     }
 
     private func changeSearchEngine(searchEngine: String) {

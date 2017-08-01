@@ -179,8 +179,6 @@ open class BrowserProfile: Profile {
 
     internal let files: FileAccessor
 
-    weak fileprivate var app: UIApplication?
-
     let db: BrowserDB
     let loginsDB: BrowserDB
     var syncManager: SyncManager!
@@ -246,7 +244,6 @@ open class BrowserProfile: Profile {
         self.syncManager = BrowserSyncManager(profile: self)
 
         self.db.prepareSchema()
-        self.db.attachDB(filename: "metadata.db", as: AttachedDatabaseMetadata)
 
         if syncDelegate != nil {
             // We almost certainly don't want to be accessing the logins.db when in an extension, so let's avoid
@@ -553,9 +550,6 @@ open class BrowserProfile: Profile {
         // Trigger cleanup. Pass in the account in case we want to try to remove
         // client-specific data from the server.
         self.syncManager.onRemovedAccount(old)
-
-        // Deregister for remote notifications.
-        app?.unregisterForRemoteNotifications()
     }
 
     func setAccount(_ account: FirefoxAccount) {

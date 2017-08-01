@@ -128,8 +128,9 @@ class FxAContentViewController: SettingsContentViewController, WKScriptMessageHa
         helper.delegate = self
         helper.application(app, didReceiveAccountJSON: data)
 
-        LeanplumIntegration.sharedInstance.setUserAttributes(attributes: [UserAttributeKeyName.signedInSync.rawValue : profile.hasAccount()])
-
+        if profile.hasAccount() {
+            LeanplumIntegration.sharedInstance.setUserAttributes(attributes: [UserAttributeKeyName.signedInSync.rawValue:  true])
+        }
         LeanplumIntegration.sharedInstance.track(eventName: LeanplumEventName.signsInFxa)
     }
 
@@ -143,6 +144,7 @@ class FxAContentViewController: SettingsContentViewController, WKScriptMessageHa
         // we only Notify via the FxALoginStateMachine.
         let flags = FxALoginFlags(pushEnabled: account.pushRegistration != nil,
                                   verified: true)
+        LeanplumIntegration.sharedInstance.setUserAttributes(attributes: [UserAttributeKeyName.signedInSync.rawValue:  true])
         DispatchQueue.main.async {
             self.delegate?.contentViewControllerDidSignIn(self, withFlags: flags)
         }

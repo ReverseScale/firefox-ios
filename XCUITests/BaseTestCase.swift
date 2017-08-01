@@ -28,10 +28,11 @@ class BaseTestCase: XCTestCase {
     
     //If it is a first run, first run window should be gone
     func dismissFirstRunUI() {
-        let firstRunUI = XCUIApplication().buttons["Start Browsing"]
+        let firstRunUI = XCUIApplication().scrollViews["IntroViewController.scrollView"]
         
         if firstRunUI.exists {
-            firstRunUI.tap()
+            firstRunUI.swipeLeft()
+            XCUIApplication().buttons["Start Browsing"].tap()
         }
     }
     
@@ -70,7 +71,13 @@ class BaseTestCase: XCTestCase {
             waitForExpectations(timeout: finishLoadingTimeout, handler: nil)
         }
     }
-
+    
+    func iPad() -> Bool {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            return true
+        }
+        return false
+    }
 }
 
 extension BaseTestCase {

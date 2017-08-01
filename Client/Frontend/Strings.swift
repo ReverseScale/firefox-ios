@@ -65,11 +65,11 @@ extension Strings {
     public static let SettingsClearPrivateDataClearButton = NSLocalizedString("Settings.ClearPrivateData.Clear.Button", value: "Clear Private Data", comment: "Button in settings that clears private data for the selected items.")
     public static let SettingsClearPrivateDataSectionName = NSLocalizedString("Settings.ClearPrivateData.SectionName", value: "Clear Private Data", comment: "Label used as an item in Settings. When touched it will open a dialog prompting the user to make sure they want to clear all of their private data.")
     public static let SettingsClearPrivateDataTitle = NSLocalizedString("Settings.ClearPrivateData.Title", value: "Clear Private Data", comment: "Title displayed in header of the setting panel.")
+    public static let SettingsDisconnectAlertTitle = NSLocalizedString("Settings.Disconnect.Title", value: "Disconnect?", comment: "Title of the alert when prompting the user asking to disconnect.")
+    public static let SettingsDisconnectButton = NSLocalizedString("Settings.Disconnect.Button", value: "Disconnect", comment: "Button displayed at the bottom of settings page allowing users to Disconnect from FxA")
+    public static let SettingsDisconnectDestructiveAction = NSLocalizedString("Settings.Disconnect.DestructiveButton", value: "Disconnect", comment: "Destructive action button in alert when user is prompted for disconnect")
     public static let SettingsSearchDoneButton = NSLocalizedString("Settings.Search.Done.Button", value: "Done", comment: "Button displayed at the top of the search settings.")
     public static let SettingsSearchEditButton = NSLocalizedString("Settings.Search.Edit.Button", value: "Edit", comment: "Button displayed at the top of the search settings.")
-    public static let SettingsSignOutButton = NSLocalizedString("Settings.SignOut.Button", value: "Sign Out", comment: "Button displayed at the bottom of settings page allowing users to Sign Out of FxA")
-    public static let SettingsSignOutDestructiveAction = NSLocalizedString("Settings.SignOut.DestructiveButton", value: "Sign Out", comment: "Destructive action button in alert when user is prompted for signing out")
-    public static let SettingsSignOutAlertTitle = NSLocalizedString("Settings.SignOut.Title", value: "Sign Out?", comment: "Title of the alert when prompting the user asking to sign out.")
 }
 
 // Error pages.
@@ -319,6 +319,11 @@ extension Strings {
     public static let AppMenuNightModeTurnOffLabel = NSLocalizedString("Menu.NightModeTurnOffAction.Label", value: "Night Mode Off", comment: "Label for the button, displayed in the menu, used to turn night mode off. 'Off' is only displayed when the mode is on.")
     public static let AppMenuNoImageModeTurnOnLabel = NSLocalizedString("Menu.NoImageModeTurnOnAction.Label", value: "Hide Images", comment: "Label for the button, displayed in the menu, used to turn no image mode on.")
     public static let AppMenuNoImageModeTurnOffLabel = NSLocalizedString("Menu.NoImageModeTurnOffAction.Label", value: "Show Images", comment: "Label for the button, displayed in the menu, used to turn no image mode off.")
+}
+
+// Snackbar shown when tapping app store link
+extension Strings {
+    public static let ExternalLinkToAppStore_ConfirmationTitle = NSLocalizedString("ExternalLink.ConfirmMessage", value: "Open this link in the App Store app?", comment: "Question shown to user when tapping a link that opens the App Store app")
 }
 
 // MARK: Deprecated Strings (to be removed in next version)

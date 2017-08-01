@@ -39,6 +39,9 @@ public struct AppConstants {
         return scheme
     }()
 
+    /// Should we try to sync (no merging) the Mobile Folder (if shouldMergeBookmarks is false)
+    public static var simpleBookmarksSyncing = false
+
     /// Whether we just mirror (false) or actively merge and upload (true).
     public static var shouldMergeBookmarks = false
 
@@ -182,6 +185,19 @@ public struct AppConstants {
 
     ///  Enables/disables push notificatuibs for FxA
     public static let MOZ_FXA_PUSH: Bool = {
+        #if MOZ_CHANNEL_RELEASE
+            return false
+        #elseif MOZ_CHANNEL_BETA
+            return true
+        #elseif MOZ_CHANNEL_FENNEC
+            return true
+        #else
+            return true
+        #endif
+    }()
+
+    ///  Toggle the feature that shows the blue 'Open copied link' banner
+    public static let MOZ_CLIPBOARD_BAR: Bool = {
         #if MOZ_CHANNEL_RELEASE
             return false
         #elseif MOZ_CHANNEL_BETA

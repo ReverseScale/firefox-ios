@@ -239,19 +239,18 @@ class TabManager: NSObject {
         if urls.isEmpty {
             return
         }
-
+        // When bulk adding tabs don't notify delegates until we are done
+        self.isRestoring = true
         var tab: Tab!
         for url in urls {
             tab = self.addTab(URLRequest(url: url), flushToDisk: false, zombie: zombie)
         }
-
         // Flush.
         storeChanges()
-
         // Select the most recent.
         self.selectTab(tab)
-
-        // Notify that we bulk-loaded so we can adjust counts.
+        self.isRestoring = false
+        // Okay now notify that we bulk-loaded so we can adjust counts and animate changes.
         delegates.forEach { $0.get()?.tabManagerDidAddTabs(self) }
     }
 
@@ -650,7 +649,12 @@ extension TabManager {
     static func tabsToRestore() -> [SavedTab]? {
         if let tabData = tabArchiveData() {
             let unarchiver = NSKeyedUnarchiver(forReadingWith: tabData)
-            return unarchiver.decodeObject(forKey: "tabs") as? [SavedTab]
+            unarchiver.decodingFailurePolicy = .setErrorAndReturn
+            guard let tabs = unarchiver.decodeObject(forKey: "tabs") as? [SavedTab] else {
+                SentryIntegration.shared.send(message: "Failed to restore tabs: \(unarchiver.error ??? "nil")", tag: "TabManager", severity: .error)
+                return nil
+            }
+            return tabs
         } else {
             return nil
         }

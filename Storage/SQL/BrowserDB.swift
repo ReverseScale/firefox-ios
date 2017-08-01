@@ -29,31 +29,6 @@ public enum DatabaseOpResult {
     case closed
 }
 
-class AttachedDB {
-    public let filename: String
-    public let schemaName: String
-    
-    init(filename: String, schemaName: String) {
-        self.filename = filename
-        self.schemaName = schemaName
-    }
-    
-    func attach(to browserDB: BrowserDB) -> NSError? {
-        let file = URL(fileURLWithPath: (try! browserDB.files.getAndEnsureDirectory())).appendingPathComponent(filename).path
-        let command = "ATTACH DATABASE '\(file)' AS '\(schemaName)'"
-        return browserDB.db.withConnection(SwiftData.Flags.readWriteCreate, synchronous: true) { connection in
-            return connection.executeChange(command, withArgs: [])
-        }
-    }
-    
-    func detach(from browserDB: BrowserDB) -> NSError? {
-        let command = "DETACH DATABASE '\(schemaName)'"
-        return browserDB.db.withConnection(SwiftData.Flags.readWriteCreate, synchronous: true) { connection in
-            return connection.executeChange(command, withArgs: [])
-        }
-    }
-}
-
 // Version 1 - Basic history table.
 // Version 2 - Added a visits table, refactored the history table to be a GenericTable.
 // Version 3 - Added a favicons table.
@@ -69,8 +44,7 @@ open class BrowserDB {
     fileprivate let filename: String
     fileprivate let secretKey: String?
     fileprivate let schemaTable: SchemaTable
-    
-    fileprivate var attachedDBs: [AttachedDB]
+
     fileprivate var initialized = [String]()
 
     // SQLITE_MAX_VARIABLE_NUMBER = 999 by default. This controls how many ?s can
@@ -83,7 +57,6 @@ open class BrowserDB {
         self.filename = filename
         self.schemaTable = SchemaTable()
         self.secretKey = secretKey
-        self.attachedDBs = []
 
         let file = URL(fileURLWithPath: (try! files.getAndEnsureDirectory())).appendingPathComponent(filename).path
         self.db = SwiftData(filename: file, key: secretKey, prevKey: nil)
@@ -106,7 +79,7 @@ open class BrowserDB {
             fatalError()
         case .closed:
             log.info("Database not created as the SQLiteConnection is closed.")
-            SentryIntegration.shared.send(message: "Database not created as the SQLiteConnection is closed.", tag: "BrowserDB", severity: .info)
+            SentryIntegration.shared.sendWithStacktrace(message: "Database not created as the SQLiteConnection is closed.", tag: "BrowserDB", severity: .info)
         case .success:
             log.debug("db: \(self.filename) has been created")
         }
@@ -229,7 +202,7 @@ open class BrowserDB {
         }) {
             // Error getting a transaction
             log.error("Unable to get a transaction: \(error.localizedDescription)")
-            SentryIntegration.shared.send(message: "Unable to get a transaction: \(error.localizedDescription)", tag: "BrowserDB", severity: .error)
+            SentryIntegration.shared.sendWithStacktrace(message: "Unable to get a transaction: \(error.localizedDescription)", tag: "BrowserDB", severity: .error)
             success = false
         }
 
@@ -244,7 +217,7 @@ open class BrowserDB {
             // Attempt to make a backup as long as the DB file still exists
             if self.files.exists(self.filename) {
                 log.warning("Couldn't create or update \(tables.map { $0.name }). Attempting to move \(self.filename) to another location.")
-                SentryIntegration.shared.send(message: "Couldn't create or update \(tables.map { $0.name }). Attempting to move \(self.filename) to another location.", tag: "BrowserDB", severity: .warning)
+                SentryIntegration.shared.sendWithStacktrace(message: "Couldn't create or update \(tables.map { $0.name }). Attempting to move \(self.filename) to another location.", tag: "BrowserDB", severity: .warning)
 
                 // Note that a backup file might already exist! We append a counter to avoid this.
                 var bakCounter = 0
@@ -270,14 +243,14 @@ open class BrowserDB {
                     }
                     
                     log.debug("Finished moving \(self.filename) successfully.")
-                } catch _ {
-                    log.error("Unable to move \(self.filename) to another location.")
-                    SentryIntegration.shared.send(message: "Unable to move \(self.filename) to another location.", tag: "BrowserDB", severity: .error)
+                } catch let error as NSError {
+                    log.error("Unable to move \(self.filename) to another location. \(error)")
+                    SentryIntegration.shared.sendWithStacktrace(message: "Unable to move \(self.filename) to another location. \(error)", tag: "BrowserDB", severity: .error)
                 }
             } else {
                 // No backup was attempted since the DB file did not exist
                 log.error("The DB \(self.filename) has been deleted while previously in use.")
-                SentryIntegration.shared.send(message: "The DB \(self.filename) has been deleted while previously in use.", tag: "BrowserDB", severity: .info)
+                SentryIntegration.shared.sendWithStacktrace(message: "The DB \(self.filename) has been deleted while previously in use.", tag: "BrowserDB", severity: .info)
             }
 
             // Do this after the relevant tables have been created.
@@ -290,13 +263,20 @@ open class BrowserDB {
 
             self.reopenIfClosed()
             
-            // Attempt to re-create the DB
+            // Attempt to re-create the DB.
             success = true
             
-            // Re-create all previously-created tables
+            // Re-create all previously-created tables.
             if let _ = db.transaction({ connection -> Bool in
                 doCreate(self.schemaTable, connection)
                 for table in tables {
+                    if table as? SchemaTable === self.schemaTable {
+                        // Don't do it twice! Sometimes we hit this failure when creating the
+                        // initial schema table, in which case `schemaTable` will actually be
+                        // in this table list.
+                        continue
+                    }
+
                     doCreate(table, connection)
                     if !success {
                         log.error("Unable to re-create table '\(table.name)'.")
@@ -310,15 +290,6 @@ open class BrowserDB {
         }
 
         return success ? .success : .failure
-    }
-
-    open func attachDB(filename: String, as schemaName: String) {
-        let attachedDB = AttachedDB(filename: filename, schemaName: schemaName)
-        if let err = attachedDB.attach(to: self) {
-            log.error("Error attaching DB. \(err.localizedDescription)")
-        } else {
-            self.attachedDBs.append(attachedDB)
-        }
     }
 
     typealias IntCallback = (_ connection: SQLiteDBConnection, _ err: inout NSError?) -> Int
@@ -467,17 +438,6 @@ extension BrowserDB {
         let wasClosed = db.closed
 
         db.reopenIfClosed()
-        
-        // Need to re-attach any previously-attached DBs if the DB was closed
-        if wasClosed {
-            for attachedDB in attachedDBs {
-                log.debug("Re-attaching DB \(attachedDB.filename) as \(attachedDB.schemaName).")
-
-                if let err = attachedDB.attach(to: self) {
-                    log.error("Error re-attaching DB. \(err.localizedDescription)")
-                }
-            }
-        }
     }
 }
 

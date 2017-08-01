@@ -13,6 +13,7 @@ import LocalAuthentication
 import Telemetry
 import SwiftRouter
 import Sync
+import CoreSpotlight
 
 private let log = Logger.browserLogger
 
@@ -32,6 +33,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
     var tabManager: TabManager!
     var adjustIntegration: AdjustIntegration?
     var foregroundStartTime = 0
+    var applicationCleanlyBackgrounded = true
 
     weak var application: UIApplication?
     var launchOptions: [AnyHashable: Any]?
@@ -47,6 +49,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
     var receivedURLs: [URL]?
 
     @discardableResult func application(_ application: UIApplication, willFinishLaunchingWithOptions launchOptions: [UIApplicationLaunchOptionsKey: Any]?) -> Bool {
+        //
+        // Determine if the application cleanly exited last time it was used. We default to true in
+        // case we have never done this before. Then check if the "ApplicationCleanlyBackgrounded" user
+        // default exists and whether was properly set to true on app exit.
+        //
+        // Then we always set the user default to false. It will be set to true when we the application
+        // is backgrounded.
+        //
+
+        self.applicationCleanlyBackgrounded = true
+
+        let defaults = UserDefaults()
+        if defaults.object(forKey: "ApplicationCleanlyBackgrounded") != nil {
+            self.applicationCleanlyBackgrounded = defaults.bool(forKey: "ApplicationCleanlyBackgrounded")
+        }
+        defaults.set(false, forKey: "ApplicationCleanlyBackgrounded")
+        defaults.synchronize()
+
         // Hold references to willFinishLaunching parameters for delayed app launch
         self.application = application
         self.launchOptions = launchOptions
@@ -207,20 +227,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         let router = Router.shared
         let rootNav = rootViewController as! UINavigationController
 
-        router.map("homepanel/:page", handler: { (params:[String: String]?) -> (Bool) in
+        router.map("homepanel/:page", handler: { (params: [String: String]?) -> (Bool) in
             guard let page = params?["page"] else {
                 return false
             }
 
             assert(Thread.isMainThread, "Opening homepanels requires being invoked on the main thread")
 
-            switch (page) {
+            switch page {
                 case "bookmarks":
                     self.browserViewController.openURLInNewTab(HomePanelType.bookmarks.localhostURL, isPrivileged: true)
                 case "history":
                     self.browserViewController.openURLInNewTab(HomePanelType.history.localhostURL, isPrivileged: true)
                 case "new-private-tab":
-                    self.browserViewController.openBlankNewTab(isPrivate: true)
+                    self.browserViewController.openBlankNewTab(focusLocationField: false, isPrivate: true)
             default:
                 break
             }
@@ -229,7 +249,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         })
 
         // Route to general settings page like this: "...settings/general"
-        router.map("settings/:page", handler: { (params:[String: String]?) -> (Bool) in
+        router.map("settings/:page", handler: { (params: [String: String]?) -> (Bool) in
             guard let page = params?["page"] else {
                 return false
             }
@@ -247,7 +267,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
 
             rootNav.present(controller, animated: true, completion: nil)
 
-            switch (page) {
+            switch page {
                 case "newtab":
                     let viewController = NewTabChoiceViewController(prefs: self.getProfile(application).prefs)
                     controller.pushViewController(viewController, animated: true)
@@ -423,10 +443,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         if let newURL = params.url {
             self.browserViewController.switchToTabForURLOrOpen(newURL, isPrivate: isPrivate, isPrivileged: false)
         } else {
-            self.browserViewController.openBlankNewTab(isPrivate: isPrivate)
+            self.browserViewController.openBlankNewTab(focusLocationField: true, isPrivate: isPrivate)
         }
 
-        LeanplumIntegration.sharedInstance.track(eventName: .openedNewTab, withParameters: ["Source":"External App or Extension" as AnyObject])
+        LeanplumIntegration.sharedInstance.track(eventName: .openedNewTab, withParameters: ["Source": "External App or Extension" as AnyObject])
     }
 
     func application(_ application: UIApplication, shouldAllowExtensionPointIdentifier extensionPointIdentifier: UIApplicationExtensionPointIdentifier) -> Bool {
@@ -443,6 +463,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         guard !DebugSettingsBundleOptions.launchIntoEmailComposer else {
             return
         }
+
+        //
+        // We are back in the foreground, so set CleanlyBackgrounded to false so that we can detect that
+        // the application was cleanly backgrounded later.
+        //
+
+        let defaults = UserDefaults()
+        defaults.set(false, forKey: "ApplicationCleanlyBackgrounded")
+        defaults.synchronize()
 
         profile?.reopen()
 
@@ -475,6 +504,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
+        //
+        // At this point we are happy to mark the app as CleanlyBackgrounded. If a crash happens in background
+        // sync then that crash will still be reported. But we won't bother the user with the Restore Tabs
+        // dialog. We don't have to because at this point we already saved the tab state properly.
+        //
+
+        let defaults = UserDefaults()
+        defaults.set(true, forKey: "ApplicationCleanlyBackgrounded")
+        defaults.synchronize()
+
         syncOnDidEnterBackground(application: application)
 
         let elapsed = Int(Date().timeIntervalSince1970) - foregroundStartTime
@@ -664,8 +703,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
     }
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([Any]?) -> Void) -> Bool {
+
+        // If the `NSUserActivity` has a `webpageURL`, it is either a deep link or an old history item
+        // reached via a "Spotlight" search before we began indexing visited pages via CoreSpotlight.
         if let url = userActivity.webpageURL {
-            
+
             // Per Adjust documenation, https://docs.adjust.com/en/universal-links/#running-campaigns-through-universal-links,
             // it is recommended that links contain the `deep_link` query parameter. This link will also
             // be url encoded.
@@ -674,10 +716,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
                 browserViewController.switchToTabForURLOrOpen(url, isPrivileged: true)
                 return true
             }
-            
+
             browserViewController.switchToTabForURLOrOpen(url, isPrivileged: true)
             return true
         }
+
+        // Otherwise, check if the `NSUserActivity` is a CoreSpotlight item and switch to its tab or
+        // open a new one.
+        if userActivity.activityType == CSSearchableItemActionType {
+            if let userInfo = userActivity.userInfo,
+                let urlString = userInfo[CSSearchableItemActivityIdentifier] as? String,
+                let url = URL(string: urlString) {
+                browserViewController.switchToTabForURLOrOpen(url, isPrivileged: true)
+                return true
+            }
+        }
+
         return false
     }
 
@@ -772,7 +826,6 @@ extension AppDelegate {
         if Logger.logPII && log.isEnabledFor(level: .info) {
             NSLog("APNS NOTIFICATION \(userInfo)")
         }
-
 
         // At this point, we know that NotificationService has been run.
         // We get to this point if the notification was received while the app was in the foreground

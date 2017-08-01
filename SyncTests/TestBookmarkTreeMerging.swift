@@ -88,6 +88,10 @@ class MockBufferItemSource: BufferItemSource {
         return deferMaybe(item)
     }
 
+    func getBufferChildrenGUIDsForParent(_ guid: GUID) -> Deferred<Maybe<[GUID]>> {
+        return deferMaybe(DatabaseError(description: "Not implemented"))
+    }
+
     func prefetchBufferItemsWithGUIDs<T: Collection>(_ guids: T) -> Success where T.Iterator.Element == GUID {
         return succeed()
     }
@@ -122,7 +126,6 @@ class MockUploader {
 // Thieved mercilessly from TestSQLiteBookmarks.
 private func getBrowserDBForFile(filename: String, files: FileAccessor) -> BrowserDB? {
     let db = BrowserDB(filename: filename, files: files)
-    db.attachDB(filename: "metadata.db", as: AttachedDatabaseMetadata)
 
     // BrowserTable exists only to perform create/update etc. operations -- it's not
     // a queryable thing that needs to stick around.
