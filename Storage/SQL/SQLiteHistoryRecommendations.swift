@@ -50,20 +50,13 @@ extension SQLiteHistory: HistoryRecommendations {
         return self.db.runQuery(sql, args: nil, factory: SQLiteHistory.iconHistoryMetadataColumnFactory)
     }
 
-    public func invalidateHighlights() -> Success {
-        return clearHighlights() >>> populateHighlights
-    }
-
     public func removeHighlightForURL(_ url: String) -> Success {
         return self.db.run([("INSERT INTO \(TableActivityStreamBlocklist) (url) VALUES (?)", [url])])
     }
 
-    public func clearHighlights() -> Success {
-        return self.db.run("DELETE FROM \(TableHighlights)", withArgs: nil)
-    }
-
-    private func populateHighlights() -> Success {
+    public func repopulateHighlights() -> Success {
         let (query, args) = computeHighlightsQuery()
+        let clearHighlightsQuery = "DELETE FROM \(TableHighlights)"
 
         // Convert the fetched row into arguments for a bulk insert along with the
         // generated cache_key value.
@@ -82,8 +75,10 @@ extension SQLiteHistory: HistoryRecommendations {
             ]
         }
         
+        // The combined query clears the highlights cache and computes new highlights in one transaction
+        let combinedQuery = [clearHighlightsQuery, query].joined(separator: ";")
         // Run the highlights computation query and take the results to bulk insert into the cached highlights table
-        return self.db.runQuery(query, args: args, factory: argsFrom)
+        return self.db.runQuery(combinedQuery, args: args, factory: argsFrom)
             >>== { highlightRows in
                 let values: [Args] = highlightRows.asArray().flatMap { $0 }
                 let highlightsProjection = [

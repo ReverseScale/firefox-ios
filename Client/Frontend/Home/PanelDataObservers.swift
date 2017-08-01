@@ -49,12 +49,16 @@ class ActivityStreamDataObserver: DataObserver {
     }
     
     func invalidate(highlights: Bool) {
+        guard !profile.isShutdown else {
+            return
+        }
+
         self.delegate?.willInvalidateDataSources()
 
         let notify = {
             self.delegate?.didInvalidateDataSources()
         }
-        
+
         let invalidateTopSites: () -> Success = {
             self.profile.history.setTopSitesNeedsInvalidation()
             return self.profile.history.updateTopSitesCacheIfInvalidated() >>> succeed
@@ -62,8 +66,14 @@ class ActivityStreamDataObserver: DataObserver {
 
         let shouldInvalidate = highlights ? true : (Date.now() - lastInvalidation > invalidationTime)
         lastInvalidation = shouldInvalidate ? Date.now() : lastInvalidation
-        let query = shouldInvalidate ? [self.profile.recommendations.invalidateHighlights, invalidateTopSites] : [invalidateTopSites]
-        accumulate(query) >>> effect(notify)
+        let invalidateHighlights: () -> Success = {
+            guard shouldInvalidate else {
+                return succeed()
+            }
+            return self.profile.recommendations.repopulateHighlights()
+        }
+
+        invalidateTopSites() >>> invalidateHighlights >>> effect(notify)
     }
     
     @objc func notificationReceived(_ notification: Notification) {
